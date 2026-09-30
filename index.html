@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Palabra · CEIP Carlos III</title>
+  <meta name="description" content="La palabra del día del CEIP Carlos III. Adivina la palabra oculta en seis intentos. Sin anuncios, sin registro.">
+  <meta name="theme-color" content="#F3EDE2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#11100E" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="preload" href="assets/fonts/fraunces-latin-full-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="aura" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <div class="app" id="app">
+    <header class="top">
+      <button class="icon-btn" id="btn-help" aria-label="Cómo se juega" data-tip="Cómo se juega">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><circle cx="12" cy="16.9" r=".4" class="fill"/></svg>
+      </button>
+
+      <h1 class="brand" aria-label="Palabra">
+        <span class="brand-word" aria-hidden="true"><span>P</span><span>a</span><span>l</span><span>a</span><span>b</span><span>r</span><span>a</span></span>
+      </h1>
+
+      <div class="top-right">
+        <button class="icon-btn" id="btn-stats" aria-label="Estadísticas" data-tip="Estadísticas">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19.5V13M10 19.5V6.5M15 19.5v-9M20 19.5v-4"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-settings" aria-label="Ajustes" data-tip="Ajustes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="dateline" aria-live="off">
+      <span class="dl-school">CEIP Carlos III</span>
+      <span class="dl-sep dl-sep1" aria-hidden="true"></span>
+      <span id="dl-number">Nº 001</span>
+      <span class="dl-sep" aria-hidden="true"></span>
+      <span id="dl-date">—</span>
+    </div>
+
+    <nav class="modes" role="tablist" aria-label="Modo de juego">
+      <button role="tab" id="tab-daily" class="mode is-active" aria-selected="true" data-mode="daily">Palabra del día</button>
+      <button role="tab" id="tab-free" class="mode" aria-selected="false" data-mode="free">Modo libre</button>
+      <span class="mode-pill" aria-hidden="true"></span>
+    </nav>
+
+    <div class="banner" id="banner" hidden></div>
+
+    <main class="stage" id="stage">
+      <div class="board" id="board" role="grid" aria-label="Tablero: seis intentos de cinco letras"></div>
+    </main>
+
+    <div class="keyboard" id="keyboard" aria-label="Teclado" role="group"></div>
+  </div>
+
+  <div class="toasts" id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+  <div class="sr-only" id="sr" aria-live="assertive"></div>
+  <canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
+
+  <!-- AYUDA -->
+  <dialog class="sheet" id="dlg-help" aria-labelledby="help-title">
+    <div class="sheet-inner" tabindex="-1" autofocus>
+      <button class="close" data-close aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <p class="eyebrow">Cómo se juega</p>
+      <h2 id="help-title" class="display">Adivina la palabra<br><em>en seis intentos.</em></h2>
+      <ul class="rules">
+        <li>Cada intento debe ser una palabra válida de <strong>cinco letras</strong>. Pulsa <kbd>Enviar</kbd> para comprobarla.</li>
+        <li>Las tildes no cuentan, pero la <strong>Ñ</strong> es una letra distinta de la N.</li>
+        <li>Después de cada intento, las casillas cambian de color para darte pistas.</li>
+      </ul>
+      <div class="examples">
+        <div class="ex">
+          <div class="ex-row" data-example="0"></div>
+          <p><strong>G</strong> está en la palabra y en el lugar correcto.</p>
+        </div>
+        <div class="ex">
+          <div class="ex-row" data-example="1"></div>
+          <p><strong>L</strong> está en la palabra, pero en otro lugar.</p>
+        </div>
+        <div class="ex">
+          <div class="ex-row" data-example="2"></div>
+          <p><strong>U</strong> no está en ninguna posición.</p>
+        </div>
+      </div>
+      <p class="fine">Hay una palabra nueva cada día a medianoche, la misma para todo el colegio. ¿Queréis más? Probad el <strong>modo libre</strong>.</p>
+      <button class="btn primary wide" data-close>¡A jugar!</button>
+    </div>
+  </dialog>
+
+  <!-- ESTADÍSTICAS / FINAL -->
+  <dialog class="sheet" id="dlg-stats" aria-labelledby="stats-title">
+    <div class="sheet-inner" tabindex="-1" autofocus>
+      <button class="close" data-close aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+
+      <section class="result" id="result" hidden>
+        <p class="eyebrow" id="result-eyebrow">La palabra era</p>
+        <div class="reveal-word" id="reveal-word"></div>
+        <p class="result-line" id="result-line"></p>
+        <div class="result-actions">
+          <a class="btn ghost" id="rae-link" href="#" target="_blank" rel="noopener">Ver en el diccionario ↗</a>
+        </div>
+      </section>
+
+      <div id="stats-block">
+      <p class="eyebrow" id="stats-title">Tus estadísticas</p>
+      <div class="stats">
+        <div class="stat"><b id="st-played">0</b><span>Jugadas</span></div>
+        <div class="stat"><b id="st-win">0</b><span>% Aciertos</span></div>
+        <div class="stat"><b id="st-streak">0</b><span>Racha</span></div>
+        <div class="stat"><b id="st-max">0</b><span>Mejor racha</span></div>
+      </div>
+
+      <p class="eyebrow">Distribución de intentos</p>
+      <ol class="dist" id="dist"></ol>
+      </div>
+
+      <div class="footer-row" id="stats-footer">
+        <div class="countdown" id="countdown-wrap">
+          <span class="eyebrow">Siguiente palabra en</span>
+          <time id="countdown">--:--:--</time>
+        </div>
+        <div class="footer-actions">
+          <button class="btn primary" id="btn-share">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5M7.5 8 12 3.5 16.5 8M5 12.5v6A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-6"/></svg>
+            Compartir
+          </button>
+          <button class="btn ghost" id="btn-play-free">Modo libre →</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- AJUSTES -->
+  <dialog class="sheet" id="dlg-settings" aria-labelledby="settings-title">
+    <div class="sheet-inner" tabindex="-1" autofocus>
+      <button class="close" data-close aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <p class="eyebrow">Preferencias</p>
+      <h2 id="settings-title" class="display">Ajustes</h2>
+
+      <div class="settings">
+        <div class="setting">
+          <div><strong>Tema</strong><span>Claro, oscuro o el del dispositivo.</span></div>
+          <div class="seg" id="theme-seg" role="radiogroup" aria-label="Tema">
+            <button role="radio" data-theme-opt="light">Claro</button>
+            <button role="radio" data-theme-opt="auto">Auto</button>
+            <button role="radio" data-theme-opt="dark">Oscuro</button>
+          </div>
+        </div>
+        <label class="setting">
+          <div><strong>Modo difícil</strong><span>Las pistas reveladas deben usarse en los siguientes intentos.</span></div>
+          <input type="checkbox" class="switch" id="opt-hard">
+        </label>
+        <label class="setting">
+          <div><strong>Alto contraste</strong><span>Colores naranja y azul, pensados para daltonismo.</span></div>
+          <input type="checkbox" class="switch" id="opt-contrast">
+        </label>
+        <label class="setting">
+          <div><strong>Modo pizarra</strong><span>Todo más grande, ideal para la pantalla digital del aula.</span></div>
+          <input type="checkbox" class="switch" id="opt-board">
+        </label>
+        <label class="setting">
+          <div><strong>Sonido</strong><span>Suaves efectos al escribir y descubrir letras.</span></div>
+          <input type="checkbox" class="switch" id="opt-sound">
+        </label>
+      </div>
+
+      <div class="challenge">
+        <p class="eyebrow">Para el profesorado</p>
+        <h3 class="display small">Crea un reto para tu clase</h3>
+        <p class="fine">Escribe una palabra de cinco letras y comparte el enlace. La palabra viaja cifrada: nadie la verá en la dirección.</p>
+        <form class="challenge-form" id="challenge-form" autocomplete="off">
+          <input id="challenge-input" maxlength="5" placeholder="p. ej. TIZAS" aria-label="Palabra del reto" spellcheck="false" autocapitalize="characters">
+          <button class="btn primary" type="submit">Crear enlace</button>
+        </form>
+        <div class="challenge-out" id="challenge-out" hidden>
+          <input id="challenge-url" readonly aria-label="Enlace del reto">
+          <button class="btn ghost" id="challenge-copy" type="button">Copiar</button>
+        </div>
+      </div>
+
+      <p class="colophon">Hecho en el CEIP Carlos III, sin anuncios ni rastreadores. Funciona sin conexión.<br>Tus datos se guardan solo en este dispositivo.</p>
+    </div>
+  </dialog>
+
+  <noscript><p class="noscript">Palabra necesita JavaScript para funcionar.</p></noscript>
+
+  <script src="js/words.js"></script>
+  <script src="js/dict.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
