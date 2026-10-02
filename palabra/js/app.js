@@ -114,7 +114,7 @@
   }
 
   // ---------- Estado ----------
-  var settings = Object.assign({ theme: "auto", hard: false, contrast: false, board: false, sound: false }, load("settings", {}));
+  var settings = Object.assign({ theme: "auto", hard: false, contrast: false, board: false, sound: false, clase: "" }, load("settings", {}));
   var stats = Object.assign({ played: 0, wins: 0, streak: 0, max: 0, dist: [0, 0, 0, 0, 0, 0], lastWin: null, lastDay: null }, load("stats", {}));
   var DAY = todayIndex();
   var mode = "daily";   // daily | free | challenge
@@ -286,6 +286,8 @@
     var box = $("#toasts");
     while (box.children.length > 2) box.removeChild(box.firstChild);
     box.appendChild(el);
+    // Por encima de los diálogos abiertos (capa superior)
+    if (box.showPopover) try { if (box.matches(":popover-open")) box.hidePopover(); box.showPopover(); } catch (e) {}
     setTimeout(function () {
       el.classList.add("out");
       setTimeout(function () { el.remove(); }, 400);
@@ -388,6 +390,7 @@
       stats.max = Math.max(stats.max, stats.streak);
     } else stats.streak = 0;
     save("stats", stats);
+    queueResult(game);
   }
 
   // ---------- Confeti (canvas ligero) ----------
@@ -474,6 +477,7 @@
         : "<b>" + escapeHtml(disp.charAt(0).toUpperCase() + disp.slice(1)) + "</b>. " + (game.kind === "daily" ? "¡Mañana más!" : "¡A la próxima!");
       $("#rae-link").href = "https://dle.rae.es/" + encodeURIComponent(disp);
     }
+    updateRankNote();
 
     // Estadísticas (solo cuentan las de la palabra del día)
     var showStats = game.kind === "daily" || !finished;
@@ -507,6 +511,120 @@
     if (todayIndex() !== DAY) { DAY = todayIndex(); if (mode === "daily" && !busy) switchMode("daily", true); }
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); }
+
+  // ---------- Ranking por clases (opcional: Google Sheets + Apps Script) ----------
+  var RANK_URL = String((window.PALABRA_CONFIG || {}).rankingUrl || "").trim();
+  var classes = load("clases", []);
+  var rankCache = {}, rankPeriod = "semana", flushing = false;
+
+  function deviceId() {
+    var id = load("device", null);
+    if (!id) { id = (Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/[^a-z0-9]/g, ""); save("device", id); }
+    return id;
+  }
+  function dateOf(day) { return new Date(LAUNCH + day * 864e5).toISOString().slice(0, 10); }
+  function points(g) { return g.status === "won" ? TRIES + 1 - g.guesses.length : 0; }
+  function api(params) {
+    var q = Object.keys(params).map(function (k) { return k + "=" + encodeURIComponent(params[k]); }).join("&");
+    return fetch(RANK_URL + (RANK_URL.indexOf("?") < 0 ? "?" : "&") + q, { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) { if (!d || !d.ok) throw new Error((d && d.error) || "error"); return d; });
+  }
+  function loadClasses() {
+    return api({ action: "clases" }).then(function (d) {
+      if (Array.isArray(d.clases)) { classes = d.clases; save("clases", classes); fillClassSelects(); }
+    }).catch(function () {});
+  }
+  function fillClassSelects() {
+    var list = classes.slice();
+    if (settings.clase && list.indexOf(settings.clase) < 0) list.unshift(settings.clase);
+    var html = '<option value="">Elige tu clase…</option>' + list.map(function (c) {
+      return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + "</option>";
+    }).join("");
+    $$("select.class-select").forEach(function (sel) { sel.innerHTML = html; sel.value = settings.clase || ""; });
+  }
+  function setClass(c) {
+    settings.clase = c || ""; save("settings", settings);
+    fillClassSelects(); updateRankNote(); flushResults();
+    if (c) toast("¡Ahora juegas por " + c + "!");
+  }
+  function queueResult(g) {
+    if (!RANK_URL || g.kind !== "daily" || g.status === "playing" || g.queued) return;
+    g.queued = true; persist();
+    var q = load("pending", []);
+    q.push({ fecha: dateOf(g.day), dia: g.day + 1, intentos: g.status === "won" ? g.guesses.length : 0, dificil: !!settings.hard });
+    save("pending", q);
+    flushResults();
+  }
+  function flushResults() {
+    if (!RANK_URL || !settings.clase || flushing) return;
+    var q = load("pending", []);
+    if (!q.length) return;
+    flushing = true;
+    var body = Object.assign({ clase: settings.clase, dispositivo: deviceId() }, q[0]);
+    fetch(RANK_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        // Aceptado o rechazado (duplicado, fuera de plazo…): no se reintenta.
+        var rest = load("pending", []); rest.shift(); save("pending", rest);
+        flushing = false;
+        if (res && res.ok) rankCache = {};
+        flushResults();
+      })
+      .catch(function () { flushing = false; }); // sin conexión: se reintenta más tarde
+  }
+  function updateRankNote() {
+    var el = $("#rank-note");
+    if (!RANK_URL || !game || game.kind !== "daily" || game.status === "playing") { el.hidden = true; return; }
+    el.hidden = false;
+    if (!settings.clase) {
+      el.innerHTML = '<label for="rank-class-inline">Elige tu clase para sumar tus puntos al ranking</label>' +
+        '<select class="select class-select" id="rank-class-inline"></select>';
+      fillClassSelects();
+      $("#rank-class-inline").onchange = function (e) { setClass(e.target.value); };
+      return;
+    }
+    var p = points(game), cls = "<b>" + escapeHtml(settings.clase) + "</b>";
+    el.innerHTML = "<span>" + (p ? "+" + p + (p === 1 ? " punto" : " puntos") + " para " + cls : "Hoy no suma puntos " + cls + ". ¡Mañana más!") +
+      '</span><button type="button" class="link" id="rank-open">Ver ranking</button>';
+    $("#rank-open").onclick = function () { openRanking(); };
+  }
+
+  function openRanking(period) {
+    rankPeriod = period || rankPeriod;
+    $$("#rank-seg [data-period]").forEach(function (b) { b.setAttribute("aria-checked", String(b.dataset.period === rankPeriod)); });
+    openDialog("#dlg-rank");
+    var list = $("#rank-list"), cached = rankCache[rankPeriod];
+    if (cached && Date.now() - cached.t < 60000) { renderRanking(cached.d); return; }
+    list.innerHTML = '<li class="rank-skel"></li><li class="rank-skel"></li><li class="rank-skel"></li><li class="rank-skel"></li>';
+    var want = rankPeriod;
+    api({ action: "ranking", periodo: want }).then(function (d) {
+      rankCache[want] = { t: Date.now(), d: d };
+      if (want === rankPeriod) renderRanking(d);
+    }).catch(function () {
+      if (want === rankPeriod) list.innerHTML = '<li class="rank-empty">No se ha podido cargar el ranking.<br>Comprueba la conexión e inténtalo de nuevo.</li>';
+    });
+  }
+  function renderRanking(d) {
+    var rows = d.clases || [], max = Math.max.apply(null, rows.map(function (r) { return r.puntos; }).concat(1));
+    if (!rows.some(function (r) { return r.partidas; })) {
+      $("#rank-list").innerHTML = '<li class="rank-empty">Todavía no hay partidas en este periodo.<br>¡Que tu clase sea la primera!</li>';
+      return;
+    }
+    var pos = 0, prev = null;
+    var played = rows.filter(function (r) { return r.partidas; }), idle = rows.filter(function (r) { return !r.partidas; });
+    $("#rank-list").innerHTML = played.map(function (r, i) {
+      if (r.puntos !== prev) { pos = i + 1; prev = r.puntos; }
+      var mine = r.clase === settings.clase;
+      var meta = r.partidas + (r.partidas === 1 ? " partida" : " partidas") + " · " + r.aciertos + " % aciertos";
+      return '<li class="rank-row' + (mine ? " mine" : "") + '" style="--i:' + i + ";--w:" + (r.puntos / max).toFixed(3) + '">' +
+        '<span class="rank-pos">' + pos + "</span>" +
+        '<div><div class="rank-name">' + escapeHtml(r.clase) + (mine ? '<em class="tag">Tu clase</em>' : "") + "</div>" +
+        '<div class="rank-bar"><i></i></div><div class="rank-meta">' + meta + "</div></div>" +
+        '<span class="rank-pts">' + r.puntos + "<small>" + (r.puntos === 1 ? "punto" : "puntos") + "</small></span></li>";
+    }).join("") + (idle.length ? '<li class="rank-idle" style="--i:' + played.length + '"><b>Aún sin jugar:</b> ' +
+      idle.map(function (r) { return r.clase === settings.clase ? "<strong>" + escapeHtml(r.clase) + "</strong>" : escapeHtml(r.clase); }).join(", ") + "</li>" : "");
+  }
 
   // ---------- Compartir ----------
   function shareText() {
@@ -607,6 +725,9 @@
   });
 
   $("#btn-help").onclick = function () { openDialog("#dlg-help"); };
+  $("#btn-rank").onclick = function () { openRanking(); };
+  $$("#rank-seg [data-period]").forEach(function (b) { b.onclick = function () { openRanking(b.dataset.period); }; });
+  $("#opt-class").onchange = function (e) { setClass(e.target.value); };
   $("#btn-stats").onclick = function () { openStats(false); };
   $("#btn-settings").onclick = function () { openDialog("#dlg-settings"); };
   $("#btn-share").onclick = share;
@@ -676,6 +797,19 @@
 
     var code = new URLSearchParams(location.search).get("reto");
     if (!(code && startChallenge(code))) switchMode("daily", true);
+
+    if (RANK_URL) {
+      $("#btn-rank").hidden = false;
+      $("#setting-class").hidden = false;
+      fillClassSelects(); loadClasses();
+      var daily = load("daily", null);
+      if (daily && daily.day === DAY && daily.status !== "playing" && !daily.queued) {
+        if (game.kind === "daily") queueResult(game);
+        else { queueResult(daily); save("daily", daily); }
+      }
+      flushResults();
+      window.addEventListener("online", flushResults);
+    }
 
     if (!load("seenHelp", false)) {
       save("seenHelp", true);

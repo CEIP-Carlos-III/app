@@ -20,9 +20,14 @@
 
   <div class="app" id="app">
     <header class="top">
-      <button class="icon-btn" id="btn-help" aria-label="Cómo se juega" data-tip="Cómo se juega">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><circle cx="12" cy="16.9" r=".4" class="fill"/></svg>
-      </button>
+      <div class="top-left">
+        <button class="icon-btn" id="btn-help" aria-label="Cómo se juega" data-tip="Cómo se juega">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><circle cx="12" cy="16.9" r=".4" class="fill"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-rank" aria-label="Ranking de clases" data-tip="Ranking de clases" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.5h9v4.8a4.5 4.5 0 0 1-9 0z"/><path d="M7.5 6.5H4.8a.3.3 0 0 0-.3.3c0 2 1.3 3.7 3.3 4M16.5 6.5h2.7a.3.3 0 0 1 .3.3c0 2-1.3 3.7-3.3 4M12 13.8v3.4M8.5 19.5h7M9.8 17.2h4.4"/></svg>
+        </button>
+      </div>
 
       <h1 class="brand" aria-label="Palabra">
         <span class="brand-word" aria-hidden="true"><span>P</span><span>a</span><span>l</span><span>a</span><span>b</span><span>r</span><span>a</span></span>
@@ -61,7 +66,7 @@
     <div class="keyboard" id="keyboard" aria-label="Teclado" role="group"></div>
   </div>
 
-  <div class="toasts" id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+  <div class="toasts" id="toasts" popover="manual" role="status" aria-live="polite" aria-atomic="false"></div>
   <div class="sr-only" id="sr" aria-live="assertive"></div>
   <canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
 
@@ -107,6 +112,7 @@
         <div class="result-actions">
           <a class="btn ghost" id="rae-link" href="#" target="_blank" rel="noopener">Ver en el diccionario ↗</a>
         </div>
+        <div class="rank-note" id="rank-note" hidden></div>
       </section>
 
       <div id="stats-block">
@@ -138,6 +144,22 @@
     </div>
   </dialog>
 
+  <!-- RANKING -->
+  <dialog class="sheet" id="dlg-rank" aria-labelledby="rank-title">
+    <div class="sheet-inner" tabindex="-1" autofocus>
+      <button class="close" data-close aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <p class="eyebrow">CEIP Carlos III</p>
+      <h2 id="rank-title" class="display">Ranking <em>de clases</em></h2>
+      <div class="seg rank-seg" id="rank-seg" role="radiogroup" aria-label="Periodo">
+        <button role="radio" data-period="semana">Esta semana</button>
+        <button role="radio" data-period="mes">Este mes</button>
+        <button role="radio" data-period="curso">Curso</button>
+      </div>
+      <ol class="rank-list" id="rank-list" aria-live="polite"></ol>
+      <p class="fine rank-help">Cada palabra del día acertada suma puntos para tu clase: <strong>6</strong> a la primera, <strong>5</strong> a la segunda… y <strong>1</strong> en el sexto intento. ¡Cuantos más jugáis, más sumáis!</p>
+    </div>
+  </dialog>
+
   <!-- AJUSTES -->
   <dialog class="sheet" id="dlg-settings" aria-labelledby="settings-title">
     <div class="sheet-inner" tabindex="-1" autofocus>
@@ -146,6 +168,10 @@
       <h2 id="settings-title" class="display">Ajustes</h2>
 
       <div class="settings">
+        <div class="setting" id="setting-class" hidden>
+          <div><strong>Tu clase</strong><span>Tus aciertos suman puntos para el ranking de clases.</span></div>
+          <select class="select class-select" id="opt-class" aria-label="Tu clase"></select>
+        </div>
         <div class="setting">
           <div><strong>Tema</strong><span>Claro, oscuro o el del dispositivo.</span></div>
           <div class="seg" id="theme-seg" role="radiogroup" aria-label="Tema">
@@ -194,6 +220,7 @@
 
   <script src="js/words.js"></script>
   <script src="js/dict.js"></script>
+  <script src="js/config.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

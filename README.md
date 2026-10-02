@@ -11,6 +11,7 @@ La palabra del día del colegio: adivina una palabra de cinco letras en seis int
 - **Modo libre**: partidas ilimitadas con palabras al azar.
 - **Retos de clase**: en *Ajustes → Crea un reto*, el profesorado escribe una palabra y obtiene un enlace (la palabra va cifrada).
 - **Modo pizarra** para la pantalla digital, **alto contraste** (daltonismo), **modo difícil**, tema claro/oscuro y sonido opcional.
+- **Ranking por clases** opcional (Google Sheets del centro, sin datos personales): ver `palabra/ranking/INSTRUCCIONES.md`.
 - Estadísticas, rachas y resultado para compartir. Funciona **sin conexión** (PWA) y se puede instalar en móviles/tablets.
 - Accesible: teclado físico, lector de pantalla y respeto a “reducir movimiento”.
 
