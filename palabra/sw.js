@@ -1,7 +1,7 @@
 /* Service worker: la app funciona sin conexión tras la primera visita. */
-var CACHE = "palabra-v2";
+var CACHE = "palabra-v3";
 var FILES = [
-  "./", "index.html", "css/styles.css", "js/app.js", "js/words.js", "js/dict.js",
+  "./", "index.html", "css/styles.css", "js/app.js", "js/config.js", "js/words.js", "js/dict.js",
   "manifest.webmanifest", "assets/icon.svg", "assets/icon-192.png",
   "assets/fonts/fraunces-latin-full-normal.woff2", "assets/fonts/fraunces-latin-full-italic.woff2",
   "assets/fonts/inter-latin-wght-normal.woff2"
