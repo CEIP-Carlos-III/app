@@ -40,10 +40,12 @@ function configurar() {
 // API pública
 // ---------------------------------------------------------------------------
 
-/** GET ?action=clases  |  GET ?action=ranking&periodo=semana|mes|curso */
+/** GET ?action=todo (clases + los tres rankings, una sola petición)
+ *  GET ?action=clases  |  GET ?action=ranking&periodo=semana|mes|curso */
 function doGet(e) {
   var p = (e && e.parameter) || {};
   try {
+    if (p.action === "todo") return json(todo());
     if (p.action === "clases") return json({ ok: true, clases: leerClases() });
     if (p.action === "ranking") return json(ranking(p.periodo || "semana"));
     return json({ ok: true, servicio: "Palabra · ranking" });
@@ -76,7 +78,7 @@ function doPost(e) {
     var puntos = intentos ? 7 - intentos : 0;
     hojaResultados().appendRow([d.fecha, Number(d.dia) || "", d.clase, intentos || "X", intentos ? "Sí" : "No", puntos, d.dificil ? "Sí" : "No", disp, new Date()]);
     cache.put(clave, "1", 21600);
-    ["semana", "mes", "curso"].forEach(function (k) { cache.remove("rk:" + k); });
+    cache.removeAll(["rk:todo", "rk:semana", "rk:mes", "rk:curso"]);
     return json({ ok: true, puntos: puntos });
   } catch (err) {
     return json({ ok: false, error: String(err) });
@@ -89,42 +91,68 @@ function doPost(e) {
 // Lógica
 // ---------------------------------------------------------------------------
 
-function ranking(periodo) {
-  if (["semana", "mes", "curso"].indexOf(periodo) < 0) periodo = "semana";
+/** Clases y rankings de semana, mes y curso calculados en UNA sola lectura de la hoja.
+ *  Se guarda en caché 10 min y se invalida en cuanto llega un resultado nuevo. */
+function todo() {
   var cache = CacheService.getScriptCache();
-  var hit = cache.get("rk:" + periodo);
+  var hit = cache.get("rk:todo");
   if (hit) return JSON.parse(hit);
 
   var hoy = fechaMadrid(new Date());
-  var desde = inicioPeriodo(periodo, hoy);
   var clases = leerClases();
-  var t = {};
-  clases.forEach(function (c) { t[c] = { clase: c, puntos: 0, partidas: 0, aciertos: 0, sumaIntentos: 0 }; });
+  var periodos = ["semana", "mes", "curso"];
+  var desde = {}, t = {};
+  periodos.forEach(function (k) {
+    desde[k] = inicioPeriodo(k, hoy);
+    t[k] = {};
+    clases.forEach(function (c) { t[k][c] = { puntos: 0, partidas: 0, aciertos: 0, sumaIntentos: 0 }; });
+  });
+  var minimo = desde.curso < desde.semana ? desde.curso : desde.semana;
 
   var sh = hojaResultados();
   var n = sh.getLastRow() - 1;
   if (n > 0) {
-    sh.getRange(2, 1, n, 4).getValues().forEach(function (r) {
+    var rows = sh.getRange(2, 1, n, 4).getValues();
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
       var fecha = r[0] instanceof Date ? Utilities.formatDate(r[0], TZ, "yyyy-MM-dd") : String(r[0]);
-      if (fecha < desde || fecha > hoy || !t[r[2]]) return;
-      var it = Number(r[3]) || 0, x = t[r[2]];
-      x.partidas++;
-      if (it) { x.aciertos++; x.sumaIntentos += it; x.puntos += 7 - it; }
-    });
+      if (fecha < minimo || fecha > hoy || !t.curso[r[2]]) continue;
+      var it = Number(r[3]) || 0;
+      for (var k = 0; k < 3; k++) {
+        if (fecha < desde[periodos[k]]) continue;
+        var x = t[periodos[k]][r[2]];
+        x.partidas++;
+        if (it) { x.aciertos++; x.sumaIntentos += it; x.puntos += 7 - it; }
+      }
+    }
   }
 
-  var lista = clases.map(function (c) {
-    var x = t[c];
-    return {
-      clase: c, puntos: x.puntos, partidas: x.partidas,
-      aciertos: x.partidas ? Math.round(x.aciertos / x.partidas * 100) : 0,
-      media: x.aciertos ? Math.round(x.sumaIntentos / x.aciertos * 10) / 10 : null
+  var ranking = {};
+  periodos.forEach(function (k) {
+    ranking[k] = {
+      periodo: k, desde: desde[k], hasta: hoy,
+      clases: clases.map(function (c) {
+        var x = t[k][c];
+        return {
+          clase: c, puntos: x.puntos, partidas: x.partidas,
+          aciertos: x.partidas ? Math.round(x.aciertos / x.partidas * 100) : 0,
+          media: x.aciertos ? Math.round(x.sumaIntentos / x.aciertos * 10) / 10 : null
+        };
+      }).sort(function (a, b) { return b.puntos - a.puntos || b.aciertos - a.aciertos || b.partidas - a.partidas; })
     };
-  }).sort(function (a, b) { return b.puntos - a.puntos || b.aciertos - a.aciertos || b.partidas - a.partidas; });
+  });
 
-  var out = { ok: true, periodo: periodo, desde: desde, hasta: hoy, clases: lista };
-  cache.put("rk:" + periodo, JSON.stringify(out), 60);
+  var out = { ok: true, clases: clases, ranking: ranking, generado: new Date().toISOString() };
+  try { cache.put("rk:todo", JSON.stringify(out), 600); } catch (e) { /* demasiado grande: sin caché */ }
   return out;
+}
+
+/** Compatibilidad con versiones anteriores del juego. */
+function ranking(periodo) {
+  if (["semana", "mes", "curso"].indexOf(periodo) < 0) periodo = "semana";
+  var r = todo().ranking[periodo];
+  r.ok = true;
+  return r;
 }
 
 function inicioPeriodo(periodo, hoy) {
@@ -148,6 +176,14 @@ function yaEnviado(disp, fecha) {
 }
 
 function leerClases() {
+  var cache = CacheService.getScriptCache(), hit = cache.get("clases");
+  if (hit) return JSON.parse(hit);
+  var lista = leerClasesHoja();
+  cache.put("clases", JSON.stringify(lista), 600);
+  return lista;
+}
+
+function leerClasesHoja() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA_CLASES);
   if (!sh || sh.getLastRow() < 2) return CLASES_INICIALES.slice();
   return sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues()
@@ -168,4 +204,9 @@ function sumarDias(iso, n) {
 }
 function json(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** Al editar la hoja a mano (clases, borrar filas…) se vacía la caché para que se vea al momento. */
+function onEdit() {
+  CacheService.getScriptCache().removeAll(["clases", "rk:todo", "rk:semana", "rk:mes", "rk:curso"]);
 }

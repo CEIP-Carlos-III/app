@@ -515,7 +515,7 @@
   // ---------- Ranking por clases (opcional: Google Sheets + Apps Script) ----------
   var RANK_URL = String((window.PALABRA_CONFIG || {}).rankingUrl || "").trim();
   var classes = load("clases", []);
-  var rankCache = {}, rankPeriod = "semana", flushing = false;
+  var rankPeriod = "semana", flushing = false;
 
   function deviceId() {
     var id = load("device", null);
@@ -530,15 +530,30 @@
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (d) { if (!d || !d.ok) throw new Error((d && d.error) || "error"); return d; });
   }
-  function loadClasses() {
-    return api({ action: "clases" }).then(function (d) {
+  // Una sola petición trae clases + los tres rankings. Lo último recibido se guarda en el
+  // dispositivo y se muestra al instante; mientras, se actualiza en segundo plano.
+  var rankStore = load("ranking", null), refreshing = null;
+  function refreshAll() {
+    if (refreshing) return refreshing;
+    refreshing = api({ action: "todo" }).then(function (d) {
       if (Array.isArray(d.clases)) { classes = d.clases; save("clases", classes); fillClassSelects(); }
-    }).catch(function () {});
+      if (d.ranking) { rankStore = { t: Date.now(), r: d.ranking }; save("ranking", rankStore); }
+      else return legacyRanking(); // servidor antiguo sin "todo"
+    }).then(function () { refreshing = null; }, function (e) { refreshing = null; throw e; });
+    return refreshing;
+  }
+  function legacyRanking() {
+    var r = {};
+    return Promise.all(["semana", "mes", "curso"].map(function (k) {
+      return api({ action: "ranking", periodo: k }).then(function (d) { r[k] = d; });
+    }).concat(api({ action: "clases" }).then(function (d) {
+      if (Array.isArray(d.clases)) { classes = d.clases; save("clases", classes); fillClassSelects(); }
+    }))).then(function () { rankStore = { t: Date.now(), r: r }; save("ranking", rankStore); });
   }
   function fillClassSelects() {
     var list = classes.slice();
     if (settings.clase && list.indexOf(settings.clase) < 0) list.unshift(settings.clase);
-    var html = '<option value="">Elige tu clase…</option>' + list.map(function (c) {
+    var html = '<option value="">' + (list.length ? "Elige tu clase…" : "Cargando clases…") + "</option>" + list.map(function (c) {
       return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + "</option>";
     }).join("");
     $$("select.class-select").forEach(function (sel) { sel.innerHTML = html; sel.value = settings.clase || ""; });
@@ -568,7 +583,7 @@
         // Aceptado o rechazado (duplicado, fuera de plazo…): no se reintenta.
         var rest = load("pending", []); rest.shift(); save("pending", rest);
         flushing = false;
-        if (res && res.ok) rankCache = {};
+        if (res && res.ok) { if (rankStore) rankStore.t = 0; refreshAll().catch(function () {}); }
         flushResults();
       })
       .catch(function () { flushing = false; }); // sin conexión: se reintenta más tarde
@@ -594,18 +609,21 @@
     rankPeriod = period || rankPeriod;
     $$("#rank-seg [data-period]").forEach(function (b) { b.setAttribute("aria-checked", String(b.dataset.period === rankPeriod)); });
     openDialog("#dlg-rank");
-    var list = $("#rank-list"), cached = rankCache[rankPeriod];
-    if (cached && Date.now() - cached.t < 60000) { renderRanking(cached.d); return; }
-    list.innerHTML = '<li class="rank-skel"></li><li class="rank-skel"></li><li class="rank-skel"></li><li class="rank-skel"></li>';
-    var want = rankPeriod;
-    api({ action: "ranking", periodo: want }).then(function (d) {
-      rankCache[want] = { t: Date.now(), d: d };
-      if (want === rankPeriod) renderRanking(d);
+    var list = $("#rank-list"), have = rankStore && rankStore.r && rankStore.r[rankPeriod];
+    if (have) renderRanking(rankStore.r[rankPeriod]);
+    else list.innerHTML = '<li class="rank-skel"></li><li class="rank-skel"></li><li class="rank-skel"></li><li class="rank-skel"></li>';
+    if (have && Date.now() - rankStore.t < 30000) return; // recién actualizado
+    list.classList.toggle("is-updating", !!have);
+    refreshAll().then(function () {
+      list.classList.remove("is-updating");
+      if ($("#dlg-rank").open && rankStore) renderRanking(rankStore.r[rankPeriod]);
     }).catch(function () {
-      if (want === rankPeriod) list.innerHTML = '<li class="rank-empty">No se ha podido cargar el ranking.<br>Comprueba la conexión e inténtalo de nuevo.</li>';
+      list.classList.remove("is-updating");
+      if (!have) list.innerHTML = '<li class="rank-empty">No se ha podido cargar el ranking.<br>Comprueba la conexión e inténtalo de nuevo.</li>';
     });
   }
   function renderRanking(d) {
+    if (!d) return;
     var rows = d.clases || [], max = Math.max.apply(null, rows.map(function (r) { return r.puntos; }).concat(1));
     if (!rows.some(function (r) { return r.partidas; })) {
       $("#rank-list").innerHTML = '<li class="rank-empty">Todavía no hay partidas en este periodo.<br>¡Que tu clase sea la primera!</li>';
@@ -801,7 +819,8 @@
     if (RANK_URL) {
       $("#btn-rank").hidden = false;
       $("#setting-class").hidden = false;
-      fillClassSelects(); loadClasses();
+      fillClassSelects();
+      refreshAll().catch(function () {}); // precarga: al abrir el ranking ya estará listo
       var daily = load("daily", null);
       if (daily && daily.day === DAY && daily.status !== "playing" && !daily.queued) {
         if (game.kind === "daily") queueResult(game);
