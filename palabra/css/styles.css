@@ -864,3 +864,5 @@ kbd {
 .rank-idle { margin-top: 10px; padding: 14px 4px 0; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.6; color: var(--muted); animation: rise .6s var(--ease-out) both; animation-delay: calc(var(--i) * 40ms); }
 .rank-idle b { color: var(--ink-2); font-weight: 620; }
 .rank-idle strong { color: var(--correct); }
+.rank-list { transition: opacity .3s var(--ease-out); }
+.rank-list.is-updating { opacity: .55; }

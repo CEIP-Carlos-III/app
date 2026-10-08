@@ -33,3 +33,8 @@ Al publicarse el cambio aparecerán el botón del trofeo 🏆 y la opción **Tu 
 - Si cambias el código del script, usa **Implementar → Gestionar implementaciones → Editar → Nueva versión** para mantener la misma URL.
 
 > Es un juego de aula: un alumno con conocimientos técnicos podría enviar resultados falsos. Si veis algo raro, se puede borrar la fila en la hoja.
+
+## Actualizar el script (cuando cambie `Codigo.gs`)
+1. En la hoja: **Extensiones → Apps Script**, borra el código y pega el nuevo [`Codigo.gs`](Codigo.gs). Guarda.
+2. **Implementar → Gestionar implementaciones** → lápiz ✏️ → *Versión*: **Nueva versión** → **Implementar**.
+   Así la URL no cambia y no hay que tocar `config.js`.
